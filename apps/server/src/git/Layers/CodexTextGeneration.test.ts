@@ -2,6 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path } from "effect";
 import { expect } from "vitest";
+import { spawnSync } from "node:child_process";
 
 import { ServerConfig } from "../../config.ts";
 import { TextGenerationError } from "../Errors.ts";
@@ -531,6 +532,12 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         Effect.gen(function* () {
           const textGeneration = yield* TextGeneration;
 
+          yield* Effect.sync(() => {
+            spawnSync("git", ["config", "t3code.commitMessageStyle", "gitmoji"], {
+              cwd: process.cwd(),
+            });
+          });
+
           const generated = yield* textGeneration.generateCommitMessage({
             cwd: process.cwd(),
             branch: "feature/auth",
@@ -539,6 +546,12 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
           });
 
           expect(generated.subject).toContain("✨");
+
+          yield* Effect.sync(() => {
+            spawnSync("git", ["config", "--unset", "t3code.commitMessageStyle"], {
+              cwd: process.cwd(),
+            });
+          });
         }),
       ),
   );
@@ -558,6 +571,12 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         Effect.gen(function* () {
           const textGeneration = yield* TextGeneration;
 
+          yield* Effect.sync(() => {
+            spawnSync("git", ["config", "t3code.commitMessageStyle", "conventional"], {
+              cwd: process.cwd(),
+            });
+          });
+
           const generated = yield* textGeneration.generateCommitMessage({
             cwd: process.cwd(),
             branch: "feature/auth",
@@ -567,6 +586,12 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
 
           expect(generated.subject).not.toContain("✨");
           expect(generated.subject).not.toMatch(/^[\p{Emoji}]/u);
+
+          yield* Effect.sync(() => {
+            spawnSync("git", ["config", "--unset", "t3code.commitMessageStyle"], {
+              cwd: process.cwd(),
+            });
+          });
         }),
       ),
   );
@@ -583,6 +608,12 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
       },
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
+
+        yield* Effect.sync(() => {
+          spawnSync("git", [ "config", "--unset", "t3code.commitMessageStyle"], {
+            cwd: process.cwd(),
+          });
+        });
 
         const generated = yield* textGeneration.generateCommitMessage({
           cwd: process.cwd(),
@@ -608,6 +639,12 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
 
+        yield* Effect.sync(() => {
+          spawnSync("git", [ "config", "t3code.commitMessageStyle", "GITMOJI"], {
+            cwd: process.cwd(),
+          });
+        });
+
         const generated = yield* textGeneration.generateCommitMessage({
           cwd: process.cwd(),
           branch: "fix/crash",
@@ -616,6 +653,12 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         });
 
         expect(generated.subject).toMatch(/^[\p{Emoji}]/u);
+
+        yield* Effect.sync(() => {
+          spawnSync("git", [ "config", "--unset", "t3code.commitMessageStyle"], {
+            cwd: process.cwd(),
+          });
+        });
       }),
     ),
   );
@@ -632,6 +675,12 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
 
+        yield* Effect.sync(() => {
+          spawnSync("git", [ "config", "t3code.commitMessageStyle", "use-gitmoji"], {
+            cwd: process.cwd(),
+          });
+        });
+
         const generated = yield* textGeneration.generateCommitMessage({
           cwd: process.cwd(),
           branch: "docs/readme",
@@ -640,6 +689,12 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         });
 
         expect(generated.subject).toMatch(/^[\p{Emoji}]/u);
+
+        yield* Effect.sync(() => {
+          spawnSync("git", [ "config", "--unset", "t3code.commitMessageStyle"], {
+            cwd: process.cwd(),
+          });
+        });
       }),
     ),
   );
@@ -656,6 +711,12 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
 
+        yield* Effect.sync(() => {
+          spawnSync("git", [ "config", "t3code.commitMessageStyle", "invalid-value"], {
+            cwd: process.cwd(),
+          });
+        });
+
         const generated = yield* textGeneration.generateCommitMessage({
           cwd: process.cwd(),
           branch: "refactor/structure",
@@ -664,6 +725,12 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         });
 
         expect(generated.subject).not.toMatch(/^[\p{Emoji}]/u);
+
+        yield* Effect.sync(() => {
+          spawnSync("git", [ "config", "--unset", "t3code.commitMessageStyle"], {
+            cwd: process.cwd(),
+          });
+        });
       }),
     ),
   );
@@ -680,6 +747,12 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
 
+        yield* Effect.sync(() => {
+          spawnSync("git", [ "config", "t3code.commitMessageStyle", " gitmoji "], {
+            cwd: process.cwd(),
+          });
+        });
+
         const generated = yield* textGeneration.generateCommitMessage({
           cwd: process.cwd(),
           branch: "feature/api",
@@ -688,6 +761,12 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         });
 
         expect(generated.subject).toMatch(/^[\p{Emoji}]/u);
+
+        yield* Effect.sync(() => {
+          spawnSync("git", [ "config", "--unset", "t3code.commitMessageStyle"], {
+            cwd: process.cwd(),
+          });
+        });
       }),
     ),
   );
@@ -704,11 +783,23 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
 
+        yield* Effect.sync(() => {
+          spawnSync("git", ["config", "t3code.commitMessageStyle", "gitmoji"], {
+            cwd: process.cwd(),
+          });
+        });
+
         yield* textGeneration.generateCommitMessage({
           cwd: process.cwd(),
           branch: "test/coverage",
           stagedSummary: "M test.test.ts",
           stagedPatch: "+expect(true).toBe(true)",
+        });
+
+        yield* Effect.sync(() => {
+          spawnSync("git", ["config", "--unset", "t3code.commitMessageStyle"], {
+            cwd: process.cwd(),
+          });
         });
       }),
     ),
