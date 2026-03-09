@@ -7,9 +7,12 @@ import { ServerConfig } from "../../config.ts";
 import { CodexTextGenerationLive } from "./CodexTextGeneration.ts";
 import { TextGenerationError } from "../Errors.ts";
 import { TextGeneration } from "../Services/TextGeneration.ts";
+import { GitCoreLive } from "./GitCore.ts";
+import { GitServiceLive } from "./GitService.ts";
 
 const makeCodexTextGenerationTestLayer = (stateDir: string) =>
   CodexTextGenerationLive.pipe(
+    Layer.provide(GitCoreLive.pipe(Layer.provideMerge(GitServiceLive))),
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), stateDir)),
     Layer.provideMerge(NodeServices.layer),
   );
