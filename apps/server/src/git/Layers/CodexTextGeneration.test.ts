@@ -2,7 +2,6 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path } from "effect";
 import { expect } from "vitest";
-import { spawnSync } from "node:child_process";
 
 import { ServerConfig } from "../../config.ts";
 import { TextGenerationError } from "../Errors.ts";
@@ -372,36 +371,35 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         yield* fs.makeDirectory(path.join(process.cwd(), "attachments"), { recursive: true });
         yield* fs.writeFile(imagePath, Buffer.from("hello"));
 
-          const textGeneration = yield* TextGeneration;
-          const generated = yield* textGeneration
-            .generateBranchName({
-              cwd: process.cwd(),
-              message: "Fix layout bug from screenshot.",
-              attachments: [
-                {
-                  type: "image",
-                  id: attachmentId,
-                  name: "bug.png",
-                  mimeType: "image/png",
-                  sizeBytes: 5,
-                },
-              ],
-            })
-            .pipe(
-              Effect.tap(() =>
-                fs.stat(imagePath).pipe(
-                  Effect.map((fileInfo) => {
-                    expect(fileInfo.type).toBe("File");
-                  }),
-                ),
+        const textGeneration = yield* TextGeneration;
+        const generated = yield* textGeneration
+          .generateBranchName({
+            cwd: process.cwd(),
+            message: "Fix layout bug from screenshot.",
+            attachments: [
+              {
+                type: "image",
+                id: attachmentId,
+                name: "bug.png",
+                mimeType: "image/png",
+                sizeBytes: 5,
+              },
+            ],
+          })
+          .pipe(
+            Effect.tap(() =>
+              fs.stat(imagePath).pipe(
+                Effect.map((fileInfo) => {
+                  expect(fileInfo.type).toBe("File");
+                }),
               ),
             ),
             Effect.ensuring(fs.remove(imagePath).pipe(Effect.catch(() => Effect.void))),
           );
 
-          expect(generated.branch).toBe("fix/ui-regression");
-        }),
-      ),
+        expect(generated.branch).toBe("fix/ui-regression");
+      }),
+    ),
   );
 
   it.effect("ignores missing attachment ids for codex image inputs", () =>
@@ -486,7 +484,10 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
   it.effect("returns typed TextGenerationError when codex exits non-zero", () =>
     withFakeCodexEnv(
       {
-        output: JSON.stringify({ subject: "ignored", body: "" }),
+        output: JSON.stringify({
+          subject: "fix crash on startup",
+          body: "",
+        }),
         exitCode: 1,
         stderr: "codex execution failed",
       },
@@ -496,9 +497,9 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         const result = yield* textGeneration
           .generateCommitMessage({
             cwd: process.cwd(),
-            branch: "feature/codex-error",
-            stagedSummary: "M README.md",
-            stagedPatch: "diff --git a/README.md b/README.md",
+            branch: "fix/crash",
+            stagedSummary: "M src/index.ts",
+            stagedPatch: "+process.on('uncaughtException', logger.error)",
           })
           .pipe(
             Effect.match({
@@ -516,289 +517,76 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
     ),
   );
 
-  it.effect(
-    "includes gitmoji instructions when config is set to 'gitmoji'",
-    () =>
-      withFakeCodexEnv(
-        {
-          output: JSON.stringify({
-            subject: "✨ add authentication",
-            body: "",
-          }),
-          stdinMustContain: "subject must start with a gitmoji emoji",
-        },
-        Effect.gen(function* () {
-          const textGeneration = yield* TextGeneration;
-
-          yield* Effect.sync(() => {
-            spawnSync("git", ["config", "t3code.commitMessageStyle", "gitmoji"], {
-              cwd: process.cwd(),
-            });
-          });
-
-          const generated = yield* textGeneration.generateCommitMessage({
-            cwd: process.cwd(),
-            branch: "feature/auth",
-            stagedSummary: "M src/auth.ts",
-            stagedPatch: "+export function authenticate() {}",
-          });
-
-          expect(generated.subject).toContain("✨");
-
-          yield* Effect.sync(() => {
-            spawnSync("git", ["config", "--unset", "t3code.commitMessageStyle"], {
-              cwd: process.cwd(),
-            });
-          });
-        }),
-      ),
-  );
-
-  it.effect(
-    "uses conventional style when config is set to 'conventional'",
-    () =>
-      withFakeCodexEnv(
-        {
-          output: JSON.stringify({
-            subject: "add authentication feature",
-            body: "",
-          }),
-          stdinMustNotContain: "gitmoji",
-          stdinMustContain: "subject must be imperative",
-        },
-        Effect.gen(function* () {
-          const textGeneration = yield* TextGeneration;
-
-          yield* Effect.sync(() => {
-            spawnSync("git", ["config", "t3code.commitMessageStyle", "conventional"], {
-              cwd: process.cwd(),
-            });
-          });
-
-          const generated = yield* textGeneration.generateCommitMessage({
-            cwd: process.cwd(),
-            branch: "feature/auth",
-            stagedSummary: "M src/auth.ts",
-            stagedPatch: "+export function authenticate() {}",
-          });
-
-          expect(generated.subject).not.toContain("✨");
-          expect(generated.subject).not.toMatch(/^[\p{Emoji}]/u);
-
-          yield* Effect.sync(() => {
-            spawnSync("git", ["config", "--unset", "t3code.commitMessageStyle"], {
-              cwd: process.cwd(),
-            });
-          });
-        }),
-      ),
-  );
-
-  it.effect("defaults to conventional style when config is null", () =>
+  it.effect("includes pattern analysis and examples in commit message prompt", () =>
     withFakeCodexEnv(
       {
         output: JSON.stringify({
-          subject: "fix memory leak",
+          subject: "Add feature",
           body: "",
         }),
-        stdinMustNotContain: "gitmoji",
-        stdinMustContain: "subject must be imperative",
+        stdinMustContain:
+          "Detected patterns:\n\nRecent commit examples from this repository:\n\nFormatting instructions:",
       },
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
 
-        yield* Effect.sync(() => {
-          spawnSync("git", [ "config", "--unset", "t3code.commitMessageStyle"], {
-            cwd: process.cwd(),
-          });
-        });
-
         const generated = yield* textGeneration.generateCommitMessage({
           cwd: process.cwd(),
-          branch: "fix/leak",
-          stagedSummary: "M src/memory.ts",
-          stagedPatch: "-const leak = []",
-        });
-
-        expect(generated.subject).not.toContain("✨");
-      }),
-    ),
-  );
-
-  it.effect("handles case-insensitive 'gitmoji' config value", () =>
-    withFakeCodexEnv(
-      {
-        output: JSON.stringify({
-          subject: "🐛 fix crash on startup",
-          body: "",
-        }),
-        stdinMustContain: "gitmoji",
-      },
-      Effect.gen(function* () {
-        const textGeneration = yield* TextGeneration;
-
-        yield* Effect.sync(() => {
-          spawnSync("git", [ "config", "t3code.commitMessageStyle", "GITMOJI"], {
-            cwd: process.cwd(),
-          });
-        });
-
-        const generated = yield* textGeneration.generateCommitMessage({
-          cwd: process.cwd(),
-          branch: "fix/crash",
-          stagedSummary: "M src/index.ts",
-          stagedPatch: "+process.on('uncaughtException', logger.error)",
-        });
-
-        expect(generated.subject).toMatch(/^[\p{Emoji}]/u);
-
-        yield* Effect.sync(() => {
-          spawnSync("git", [ "config", "--unset", "t3code.commitMessageStyle"], {
-            cwd: process.cwd(),
-          });
-        });
-      }),
-    ),
-  );
-
-  it.effect("handles partial match with 'gitmoji' in value", () =>
-    withFakeCodexEnv(
-      {
-        output: JSON.stringify({
-          subject: "📝 update readme",
-          body: "",
-        }),
-        stdinMustContain: "gitmoji",
-      },
-      Effect.gen(function* () {
-        const textGeneration = yield* TextGeneration;
-
-        yield* Effect.sync(() => {
-          spawnSync("git", [ "config", "t3code.commitMessageStyle", "use-gitmoji"], {
-            cwd: process.cwd(),
-          });
-        });
-
-        const generated = yield* textGeneration.generateCommitMessage({
-          cwd: process.cwd(),
-          branch: "docs/readme",
+          branch: "feature/test",
           stagedSummary: "M README.md",
-          stagedPatch: "+# Installation",
+          stagedPatch: "diff --git a/README.md",
         });
 
-        expect(generated.subject).toMatch(/^[\p{Emoji}]/u);
-
-        yield* Effect.sync(() => {
-          spawnSync("git", [ "config", "--unset", "t3code.commitMessageStyle"], {
-            cwd: process.cwd(),
-          });
-        });
+        expect(generated.subject).toBe("Add feature");
       }),
     ),
   );
 
-  it.effect("ignores invalid config values and defaults to conventional", () =>
+  it.effect("includes expanded conventional commit types in prompt", () =>
     withFakeCodexEnv(
       {
         output: JSON.stringify({
-          subject: "refactor code structure",
+          subject: "Add feature",
           body: "",
         }),
-        stdinMustNotContain: "gitmoji",
+        stdinMustContain: "feat, fix, docs, style, refactor, test, chore, perf, build, ci, revert",
       },
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
-
-        yield* Effect.sync(() => {
-          spawnSync("git", [ "config", "t3code.commitMessageStyle", "invalid-value"], {
-            cwd: process.cwd(),
-          });
-        });
 
         const generated = yield* textGeneration.generateCommitMessage({
           cwd: process.cwd(),
-          branch: "refactor/structure",
-          stagedSummary: "M src/index.ts",
-          stagedPatch: "-export default App",
+          branch: "feature/test",
+          stagedSummary: "M README.md",
+          stagedPatch: "diff --git a/README.md",
         });
 
-        expect(generated.subject).not.toMatch(/^[\p{Emoji}]/u);
-
-        yield* Effect.sync(() => {
-          spawnSync("git", [ "config", "--unset", "t3code.commitMessageStyle"], {
-            cwd: process.cwd(),
-          });
-        });
+        expect(generated.subject).toBe("Add feature");
       }),
     ),
   );
 
-  it.effect("handles whitespace in config value gracefully", () =>
+  it.effect("includes imperative mood instructions in prompt", () =>
     withFakeCodexEnv(
       {
         output: JSON.stringify({
-          subject: "✨ add new endpoints",
+          subject: "Add feature",
           body: "",
         }),
-        stdinMustContain: "gitmoji",
+        stdinMustContain:
+          "Subject must be imperative mood (e.g., 'add feature' not 'added feature' or 'adds feature')",
       },
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
-
-        yield* Effect.sync(() => {
-          spawnSync("git", [ "config", "t3code.commitMessageStyle", " gitmoji "], {
-            cwd: process.cwd(),
-          });
-        });
 
         const generated = yield* textGeneration.generateCommitMessage({
           cwd: process.cwd(),
-          branch: "feature/api",
-          stagedSummary: "M src/api.ts",
-          stagedPatch: "+export const handlers = {}",
+          branch: "feature/test",
+          stagedSummary: "M README.md",
+          stagedPatch: "diff --git a/README.md",
         });
 
-        expect(generated.subject).toMatch(/^[\p{Emoji}]/u);
-
-        yield* Effect.sync(() => {
-          spawnSync("git", [ "config", "--unset", "t3code.commitMessageStyle"], {
-            cwd: process.cwd(),
-          });
-        });
-      }),
-    ),
-  );
-
-  it.effect("includes common gitmoji examples in prompt when enabled", () =>
-    withFakeCodexEnv(
-      {
-        output: JSON.stringify({
-          subject: "✅ add tests",
-          body: "",
-        }),
-        stdinMustContain: "✨ feat: new feature",
-      },
-      Effect.gen(function* () {
-        const textGeneration = yield* TextGeneration;
-
-        yield* Effect.sync(() => {
-          spawnSync("git", ["config", "t3code.commitMessageStyle", "gitmoji"], {
-            cwd: process.cwd(),
-          });
-        });
-
-        yield* textGeneration.generateCommitMessage({
-          cwd: process.cwd(),
-          branch: "test/coverage",
-          stagedSummary: "M test.test.ts",
-          stagedPatch: "+expect(true).toBe(true)",
-        });
-
-        yield* Effect.sync(() => {
-          spawnSync("git", ["config", "--unset", "t3code.commitMessageStyle"], {
-            cwd: process.cwd(),
-          });
-        });
+        expect(generated.subject).toBe("Add feature");
       }),
     ),
   );

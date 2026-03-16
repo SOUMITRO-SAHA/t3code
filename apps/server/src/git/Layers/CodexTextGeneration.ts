@@ -9,6 +9,7 @@ import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
 import { GitCore } from "../Services/GitCore.ts";
 import { TextGenerationError } from "../Errors.ts";
+import { analyzeCommitPatterns as analyzeCommitPatternsUtil } from "../analyzeCommitPatterns.ts";
 import {
   type BranchNameGenerationInput,
   type BranchNameGenerationResult,
@@ -21,8 +22,6 @@ import {
 const CODEX_MODEL = "gpt-5.3-codex";
 const CODEX_REASONING_EFFORT = "low";
 const CODEX_TIMEOUT_MS = 180_000;
-
-const GITMOJI_CONFIG_KEY = "t3code.commitMessageStyle";
 
 function toCodexOutputJsonSchema(schema: Schema.Top): unknown {
   const document = Schema.toJsonSchemaDocument(schema);
@@ -104,6 +103,10 @@ const makeCodexTextGeneration = Effect.gen(function* () {
   const commandSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const serverConfig = yield* Effect.service(ServerConfig);
   const gitCore = yield* GitCore;
+
+  const analyzeCommitPatterns = analyzeCommitPatternsUtil({
+    getRecentCommitMessages: (cwd, count) => gitCore.getRecentCommitMessages(cwd, count),
+  });
 
   type MaterializedImageAttachments = {
     readonly imagePaths: ReadonlyArray<string>;
@@ -318,54 +321,48 @@ const makeCodexTextGeneration = Effect.gen(function* () {
 
   const generateCommitMessage: TextGenerationShape["generateCommitMessage"] = (input) => {
     return Effect.gen(function* () {
-      const configValue = yield* gitCore
-        .readConfigValue(input.cwd, GITMOJI_CONFIG_KEY)
-        .pipe(Effect.catch(() => Effect.succeed(null)));
-
-      const useGitmoji = configValue === "gitmoji" ||
-        (configValue !== "conventional" && configValue !== null && configValue.toLowerCase().includes("gitmoji"));
-
+      const patterns = yield* analyzeCommitPatterns(input.cwd);
       const wantsBranch = input.includeBranch === true;
 
+      const exampleLines =
+        patterns.examples.length > 0
+          ? patterns.examples?.slice(0, 2)?.flatMap((ex) => ["  Example:", `  ${ex}`])
+          : ["  (No previous commit examples available)"];
+
       const promptSections = [
-        "You write concise git commit messages.",
+        "You write concise git commit messages by following the repository's established patterns.",
+        "",
         wantsBranch
           ? "Return a JSON object with keys: subject, body, branch."
           : "Return a JSON object with keys: subject, body.",
-        "Rules:",
+        "",
+        "Detected patterns:",
+        patterns.analysis.trim(),
+        "",
+        "Recent commit examples from this repository:",
+        ...exampleLines,
+        "",
+        "Formatting instructions:",
+        ...(patterns.hasEmojis
+          ? ["- Start with an appropriate emoji if that's the pattern"]
+          : ["- No emoji prefix (not used in this repository)"]),
+        ...(patterns.hasScopes
+          ? ["- Include scope in parentheses like type(scope): when applicable"]
+          : ["- No scope (not used in this repository)"]),
+        ...(patterns.hasTypes
+          ? [
+              "- Use conventional commit types: feat, fix, docs, style, refactor, test, chore, perf, build, ci, revert",
+            ]
+          : ["- No conventional commit type prefix (not used in this repository)"]),
+        "- Subject must be imperative mood (e.g., 'add feature' not 'added feature' or 'adds feature')",
+        "- Subject must be <= 72 characters",
+        "- No trailing period on subject line",
+        "- Body should be empty string OR include bullet points with 'for' context (e.g., 'Add user authentication' -> 'for secure access control')",
+        "- Focus on user-visible or developer-visible impact, not implementation details",
+        ...(wantsBranch
+          ? ["- branch must be a short semantic git branch fragment (2-6 words, no punctuation)"]
+          : []),
       ];
-
-      if (useGitmoji) {
-        promptSections.push(
-          "- subject must start with a gitmoji emoji (e.g., ✨, 🐛, ♻️, 📝, etc.)",
-          "- after the emoji, add a space and write the commit message in imperative mood",
-          "- subject must be <= 72 chars total (including emoji) and no trailing period",
-          "- body can be empty string or short bullet points",
-          ...(wantsBranch
-            ? ["- branch must be a short semantic git branch fragment for this change"]
-            : []),
-          "- capture the primary user-visible or developer-visible change",
-          "",
-          "Common gitmoji examples:",
-          "✨ feat: new feature",
-          "🐛 fix: bug fix",
-          "♻️ refactor: code refactoring",
-          "📝 docs: documentation",
-          "✅ test: tests",
-          "🎨 style: formatting",
-          "⚡ perf: performance",
-          "🔧 chore: maintenance",
-        );
-      } else {
-        promptSections.push(
-          "- subject must be imperative, <= 72 chars, and no trailing period",
-          "- body can be empty string or short bullet points",
-          ...(wantsBranch
-            ? ["- branch must be a short semantic git branch fragment for this change"]
-            : []),
-          "- capture the primary user-visible or developer-visible change",
-        );
-      }
 
       promptSections.push(
         "",
