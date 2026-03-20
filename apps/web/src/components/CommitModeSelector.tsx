@@ -1,4 +1,5 @@
 import type { GitCommitMessageMode } from "@t3tools/contracts";
+import { COMMIT_MODES, CUSTOM_COMMIT_TEMPLATES } from "@t3tools/contracts";
 import {
   CheckIcon,
   ChevronRightIcon,
@@ -13,73 +14,25 @@ import { Button } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { cn } from "~/lib/utils";
 
-const COMMIT_MODES: ReadonlyArray<{
+const COMMIT_MODE_ICONS: ReadonlyArray<{
   value: GitCommitMessageMode;
-  label: string;
-  summary: string;
-  description: string;
   icon: React.ComponentType<{ className?: string }>;
 }> = [
   {
     value: "standard",
-    label: "Standard",
-    summary: "Standard format",
-    description:
-      "Uses the Conventional Commits structure with type, optional scope, and description",
     icon: GitBranchIcon,
   },
   {
     value: "auto",
-    label: "Auto",
-    summary: "Infer from repo",
-    description:
-      "Analyzes past commit messages, selects the best example, and adapts to your repo's existing patterns",
     icon: SparklesIcon,
   },
   {
     value: "gitmoji",
-    label: "Gitmoji",
-    summary: "Emoji + standard",
-    description: "Uses Gitmoji emoji prefixes while following the standard conventional structure",
     icon: SmileIcon,
   },
   {
     value: "custom",
-    label: "Custom",
-    summary: "Your own rules",
-    description: "Use a predefined template or provide your own instructions for custom formatting",
     icon: Settings2Icon,
-  },
-] as const;
-
-const CUSTOM_TEMPLATES: ReadonlyArray<{
-  id: string;
-  label: string;
-  prompt: string;
-  description: string;
-  example: string;
-}> = [
-  {
-    id: "simple",
-    label: "Simple",
-    prompt: "Simple git message: imperative subject only, no prefix",
-    description: "Plain readable fallback when you do not need automated parsing",
-    example: "add login validation",
-  },
-  {
-    id: "standard",
-    label: "Standard",
-    prompt: "Standard commit format (Conventional Commits): '<type>(<scope>): <subject>'",
-    description: "Most common machine-readable format for changelogs and release tooling",
-    example: "feat(auth): add login validation",
-  },
-  {
-    id: "standard-ticket",
-    label: "Standard + Ticket",
-    prompt:
-      "Standard commit format with ticket reference in footer: '<type>(<scope>): <subject>' plus footer like 'Refs: PROJ-123'",
-    description: "Best fit when you need issue tracking without breaking conventional tooling",
-    example: "feat(auth): add login validation",
   },
 ] as const;
 
@@ -101,7 +54,7 @@ export function CommitModeSelector({
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [templatePopoverOpen, setTemplatePopoverOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  const lastAppliedTemplateRef = useRef<(typeof CUSTOM_TEMPLATES)[number] | null>(null);
+  const lastAppliedTemplateRef = useRef<(typeof CUSTOM_COMMIT_TEMPLATES)[number] | null>(null);
   const previousValueRef = useRef<GitCommitMessageMode>(value);
   const commitMessageRef = useRef(commitMessage);
 
@@ -122,9 +75,10 @@ export function CommitModeSelector({
     previousValueRef.current = value;
   }, [value, onCommitMessageChange]);
 
-  const selectedMode = COMMIT_MODES.find((mode) => mode.value === value);
+  const selectedModeConfig = COMMIT_MODES.find((mode) => mode.value === value);
+  const SelectedModeIcon = COMMIT_MODE_ICONS.find((icon) => icon.value === value)?.icon;
 
-  const handleTemplateSelect = (template: (typeof CUSTOM_TEMPLATES)[number]) => {
+  const handleTemplateSelect = (template: (typeof CUSTOM_COMMIT_TEMPLATES)[number]) => {
     let newMessage = commitMessage;
 
     if (lastAppliedTemplateRef.current) {
@@ -160,33 +114,38 @@ export function CommitModeSelector({
             <div className="space-y-2 p-2">
               <p className="font-medium text-xs">How commit messages are generated</p>
               <ul className="space-y-1.5 text-[10px] text-muted-foreground">
-                {COMMIT_MODES.map((mode) => (
-                  <li key={mode.value} className="space-y-0.5">
-                    <div className="flex items-center gap-1">
-                      <mode.icon className="size-2.5 shrink-0" />
-                      <strong className="text-xs">{mode.label}:</strong>
-                      <span>{mode.summary}</span>
-                    </div>
-                    <p className="text-[9px] opacity-80 pl-5">{mode.description}</p>
-                  </li>
-                ))}
+                {COMMIT_MODES.map((mode) => {
+                  const Icon = COMMIT_MODE_ICONS.find((icon) => icon.value === mode.value)?.icon;
+                  if (!Icon) return null;
+                  return (
+                    <li key={mode.value} className="space-y-0.5">
+                      <div className="flex items-center gap-1">
+                        <Icon className="size-2.5 shrink-0" />
+                        <strong className="text-xs">{mode.label}:</strong>
+                        <span>{mode.summary}</span>
+                      </div>
+                      <p className="text-[9px] opacity-80 pl-5">{mode.description}</p>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           </PopoverPopup>
         </Popover>
 
-        {selectedMode && (
+        {selectedModeConfig && SelectedModeIcon && (
           <div className="flex items-center align-baseline gap-0.5 text-xs text-muted-foreground">
             <span>(</span>
-            <selectedMode.icon className="size-3 shrink-0" />
-            <span>{selectedMode.summary}</span>
+            <SelectedModeIcon className="size-3 shrink-0" />
+            <span>{selectedModeConfig.summary}</span>
             <span>)</span>
           </div>
         )}
       </div>
       <div className="grid grid-cols-4 gap-2">
         {COMMIT_MODES.map((mode) => {
-          const Icon = mode.icon;
+          const Icon = COMMIT_MODE_ICONS.find((icon) => icon.value === mode.value)?.icon;
+          if (!Icon) return null;
           return (
             <Button
               key={mode.value}
@@ -217,7 +176,7 @@ export function CommitModeSelector({
                 >
                   <span className="text-xs">
                     {selectedTemplateId
-                      ? `✓ ${CUSTOM_TEMPLATES.find((t) => t.id === selectedTemplateId)?.label || "Template applied"}`
+                      ? `✓ ${CUSTOM_COMMIT_TEMPLATES.find((t) => t.id === selectedTemplateId)?.label || "Template applied"}`
                       : "Choose a template..."}
                   </span>
                   <ChevronRightIcon className="size-3.5" />
@@ -229,7 +188,7 @@ export function CommitModeSelector({
                 <p className="px-2 pt-1 text-[10px] font-medium text-muted-foreground">
                   PREDEFINED TEMPLATES
                 </p>
-                {CUSTOM_TEMPLATES.map((template) => (
+                {CUSTOM_COMMIT_TEMPLATES.map((template) => (
                   <button
                     key={template.id}
                     type="button"
