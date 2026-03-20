@@ -364,11 +364,15 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         case "custom":
           if (input.message?.trim()) {
             promptSections.push(
-              "",
-              "Custom commit instructions:",
               input.message.trim(),
               "",
-              "- Generate a commit message following the custom instructions above.",
+              "- Generate a commit message strictly following the provided template.",
+              "- Do not change the template structure or format under any condition.",
+              "- Replace all placeholders (<type>, <scope>, <subject>, <body>, <#ref>) with meaningful values based on the staged changes.",
+              "- Ensure the commit message is clear, descriptive, and complete.",
+              "- If the user includes any GitHub or Jira reference (e.g., #123, PROJ-123, or a URL), extract it and include it in the appropriate section of the template.",
+              "- Do not leave any placeholder unresolved.",
+              "- Follow the template exactly — no extra text, no missing sections."
             );
           }
           break;
