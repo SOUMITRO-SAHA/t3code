@@ -61,7 +61,9 @@ describe("commitTemplates", () => {
     it("should include ticket reference in standard-ticket template", () => {
       const ticketTemplate = CUSTOM_COMMIT_TEMPLATES.find((t) => t.id === "standard-ticket");
       expect(ticketTemplate).toBeDefined();
-      expect(ticketTemplate?.prompt).toMatch(/ticket|ticket reference|Refs:|PROJ-/i);
+      expect(ticketTemplate?.prompt).toMatch(
+        /ticket|ticket reference|issue reference|Refs:|PROJ-/i,
+      );
     });
   });
 });

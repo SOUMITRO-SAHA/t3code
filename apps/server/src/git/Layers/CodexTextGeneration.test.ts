@@ -594,7 +594,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
   );
 
   it.effect(
-    "extracts a commit template from the custom message and does not treat it literally",
+    "passes custom message directly to the AI without parsing",
     () =>
       withFakeCodexEnv(
         {
@@ -602,9 +602,8 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
             subject: "Add feature",
             body: "",
           }),
-          stdinMustContain: "Commit message template to follow:\n<type>(<scope>): <subject>",
-          stdinMustNotContain:
-            "Additional user context:\ntemplate: Standard commit format (Conventional Commits): '<type>(<scope>): <subject>'",
+          stdinMustContain:
+            "Custom commit instructions:\ntemplate: Standard commit format (Conventional Commits): '<type>(<scope>): <subject>'\n\n- Generate a commit message following the custom instructions above.",
         },
         Effect.gen(function* () {
           const textGeneration = yield* TextGeneration;

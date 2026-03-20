@@ -97,61 +97,6 @@ function sanitizePrTitle(raw: string): string {
   return "Update project changes";
 }
 
-function extractCustomCommitTemplate(raw: string): {
-  template: string | null;
-  guidance: string | null;
-} {
-  const normalized = raw.replace(/\r\n/g, "\n").trim();
-  if (normalized.length === 0) {
-    return { template: null, guidance: null };
-  }
-
-  const templateLabelMatch = normalized.match(/(?:^|\n)\s*template\s*:\s*(.+)/i);
-  const templateSource = templateLabelMatch?.[1]?.trim() ?? normalized;
-  const quotedTemplateMatches = Array.from(
-    templateSource.matchAll(/["'`](.+?)["'`]/g),
-    (match) => match[1]?.trim() ?? "",
-  ).filter((value) => value.length > 0);
-  const placeholderTemplate =
-    quotedTemplateMatches.find((value) => value.includes("<") && value.includes(">")) ??
-    quotedTemplateMatches[0] ??
-    templateSource;
-
-  const template = placeholderTemplate.trim();
-  const templateLine = templateLabelMatch?.[0]?.trim();
-
-  // Try to find the line that contains the template (with or without quotes)
-  const lines = normalized.split("\n").map((line) => line.trim());
-  let templateSourceLine: string | null = null;
-  if (templateLine) {
-    templateSourceLine = templateLine;
-  } else {
-    // Try to find a line that contains the template with quotes
-    for (const line of lines) {
-      if (
-        line.includes(`'${template}'`) ||
-        line.includes(`"${template}"`) ||
-        line.includes(`\`${template}\``)
-      ) {
-        templateSourceLine = line;
-        break;
-      }
-    }
-  }
-
-  const guidanceLines = lines.filter((line) => line.length > 0 && line !== templateSourceLine);
-  const guidance = guidanceLines.join("\n").trim();
-
-  // If guidance is the same as the template (or contained within it), don't duplicate
-  const hasUniqueGuidance =
-    guidance.length > 0 && guidance !== template && !template.includes(guidance);
-
-  return {
-    template: template.length > 0 ? template : null,
-    guidance: hasUniqueGuidance ? guidance : null,
-  };
-}
-
 const makeCodexTextGeneration = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -419,14 +364,11 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         case "custom":
           if (input.message?.trim()) {
             promptSections.push(
-              "- Generate a commit message strictly following the provided template.",
-              "- Do not change the template structure or format under any condition.",
-              "- Replace all placeholders (<type>, <scope>, <subject>, <body>, <#ref>) with meaningful values based on the staged changes.",
-              "- Ensure the commit message is clear, descriptive, and complete.",
-              "- If the user includes any GitHub or Jira reference (e.g., #123, PROJ-123, or a URL), extract it and include it in the appropriate section of the template.",
-              "- Do not leave any placeholder unresolved.",
-              "- Follow the template exactly — no extra text, no missing sections."
-
+              "",
+              "Custom commit instructions:",
+              input.message.trim(),
+              "",
+              "- Generate a commit message following the custom instructions above.",
             );
           }
           break;
