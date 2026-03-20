@@ -21,6 +21,10 @@ export interface CommitMessageGenerationInput {
   includeBranch?: boolean;
   /** Model to use for generation. Defaults to gpt-5.4-mini if not specified. */
   model?: string;
+  /** Commit message generation mode. Defaults to 'auto'. */
+  commitMessageMode?: "auto" | "gitmoji" | "standard" | "custom";
+  /** Custom instructions for commit message generation (only used when mode is 'custom'). */
+  commitMessageCustomInstructions?: string;
 }
 
 export interface CommitMessageGenerationResult {

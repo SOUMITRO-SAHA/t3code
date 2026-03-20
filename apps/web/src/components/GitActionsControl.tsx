@@ -1,7 +1,13 @@
-import type { GitStackedAction, GitStatusResult, ThreadId } from "@t3tools/contracts";
+import type {
+  GitCommitMessageMode,
+  GitStackedAction,
+  GitStatusResult,
+  ThreadId,
+} from "@t3tools/contracts";
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDownIcon, CloudUploadIcon, GitCommitIcon, InfoIcon } from "lucide-react";
+import { CommitModeSelector } from "./CommitModeSelector";
 import { GitHubIcon } from "./Icons";
 import {
   buildGitActionProgressStages,
@@ -163,6 +169,8 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
   const queryClient = useQueryClient();
   const [isCommitDialogOpen, setIsCommitDialogOpen] = useState(false);
   const [dialogCommitMessage, setDialogCommitMessage] = useState("");
+  const [commitMessageMode, setCommitMessageMode] = useState<GitCommitMessageMode>("standard");
+  const [customCommitInstructions, setCustomCommitInstructions] = useState("");
   const [excludedFiles, setExcludedFiles] = useState<ReadonlySet<string>>(new Set());
   const [isEditingFiles, setIsEditingFiles] = useState(false);
   const [pendingDefaultBranchAction, setPendingDefaultBranchAction] =
@@ -265,6 +273,8 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     async ({
       action,
       commitMessage,
+      commitMessageMode: mode = "auto",
+      commitMessageCustomInstructions = "",
       forcePushOnlyProgress = false,
       onConfirmed,
       skipDefaultBranchPrompt = false,
@@ -276,6 +286,8 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     }: {
       action: GitStackedAction;
       commitMessage?: string;
+      commitMessageMode?: GitCommitMessageMode;
+      commitMessageCustomInstructions?: string;
       forcePushOnlyProgress?: boolean;
       onConfirmed?: () => void;
       skipDefaultBranchPrompt?: boolean;
@@ -355,6 +367,8 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       const promise = runImmediateGitActionMutation.mutateAsync({
         action,
         ...(commitMessage ? { commitMessage } : {}),
+        ...(mode ? { commitMessageMode: mode } : {}),
+        ...(commitMessageCustomInstructions ? { commitMessageCustomInstructions } : {}),
         ...(featureBranch ? { featureBranch } : {}),
         ...(filePaths ? { filePaths } : {}),
       });
@@ -464,12 +478,19 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     void runGitActionWithToast({
       action,
       ...(commitMessage ? { commitMessage } : {}),
+      commitMessageMode,
+      commitMessageCustomInstructions: customCommitInstructions,
       forcePushOnlyProgress,
       ...(onConfirmed ? { onConfirmed } : {}),
       ...(filePaths ? { filePaths } : {}),
       skipDefaultBranchPrompt: true,
     });
-  }, [pendingDefaultBranchAction, runGitActionWithToast]);
+  }, [
+    pendingDefaultBranchAction,
+    runGitActionWithToast,
+    commitMessageMode,
+    customCommitInstructions,
+  ]);
 
   const checkoutNewBranchAndRunAction = useCallback(
     (actionParams: {
@@ -481,11 +502,13 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     }) => {
       void runGitActionWithToast({
         ...actionParams,
+        commitMessageMode,
+        commitMessageCustomInstructions: customCommitInstructions,
         featureBranch: true,
         skipDefaultBranchPrompt: true,
       });
     },
-    [runGitActionWithToast],
+    [runGitActionWithToast, commitMessageMode, customCommitInstructions],
   );
 
   const checkoutFeatureBranchAndContinuePendingAction = useCallback(() => {
@@ -508,6 +531,8 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
 
     setIsCommitDialogOpen(false);
     setDialogCommitMessage("");
+    setCommitMessageMode("auto");
+    setCustomCommitInstructions("");
     setExcludedFiles(new Set());
     setIsEditingFiles(false);
 
@@ -591,11 +616,15 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     const commitMessage = dialogCommitMessage.trim();
     setIsCommitDialogOpen(false);
     setDialogCommitMessage("");
+    setCommitMessageMode("auto");
+    setCustomCommitInstructions("");
     setExcludedFiles(new Set());
     setIsEditingFiles(false);
     void runGitActionWithToast({
       action: "commit",
       ...(commitMessage ? { commitMessage } : {}),
+      commitMessageMode,
+      commitMessageCustomInstructions: customCommitInstructions,
       ...(!allSelected ? { filePaths: selectedFiles.map((f) => f.path) } : {}),
     });
   }, [
@@ -604,6 +633,8 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     isCommitDialogOpen,
     runGitActionWithToast,
     selectedFiles,
+    commitMessageMode,
+    customCommitInstructions,
     setDialogCommitMessage,
     setIsCommitDialogOpen,
   ]);
@@ -768,6 +799,8 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
           if (!open) {
             setIsCommitDialogOpen(false);
             setDialogCommitMessage("");
+            setCommitMessageMode("auto");
+            setCustomCommitInstructions("");
             setExcludedFiles(new Set());
             setIsEditingFiles(false);
           }
@@ -891,6 +924,14 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                 )}
               </div>
             </div>
+            <CommitModeSelector
+              value={commitMessageMode}
+              onChange={setCommitMessageMode}
+              customInstructions={customCommitInstructions}
+              onCustomInstructionsChange={setCustomCommitInstructions}
+              commitMessage={dialogCommitMessage}
+              onCommitMessageChange={setDialogCommitMessage}
+            />
             <div className="space-y-1">
               <p className="text-xs font-medium">Commit message (optional)</p>
               <Textarea
@@ -908,6 +949,8 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
               onClick={() => {
                 setIsCommitDialogOpen(false);
                 setDialogCommitMessage("");
+                setCommitMessageMode("auto");
+                setCustomCommitInstructions("");
                 setExcludedFiles(new Set());
                 setIsEditingFiles(false);
               }}

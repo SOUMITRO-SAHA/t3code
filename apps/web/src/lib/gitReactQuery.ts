@@ -119,11 +119,15 @@ export function gitRunStackedActionMutationOptions(input: {
     mutationFn: async ({
       action,
       commitMessage,
+      commitMessageMode,
+      commitMessageCustomInstructions,
       featureBranch,
       filePaths,
     }: {
       action: GitStackedAction;
       commitMessage?: string;
+      commitMessageMode?: "auto" | "gitmoji" | "standard" | "custom";
+      commitMessageCustomInstructions?: string;
       featureBranch?: boolean;
       filePaths?: string[];
     }) => {
@@ -133,6 +137,8 @@ export function gitRunStackedActionMutationOptions(input: {
         cwd: input.cwd,
         action,
         ...(commitMessage ? { commitMessage } : {}),
+        ...(commitMessageMode ? { commitMessageMode } : {}),
+        ...(commitMessageCustomInstructions ? { commitMessageCustomInstructions } : {}),
         ...(featureBranch ? { featureBranch } : {}),
         ...(filePaths ? { filePaths } : {}),
         ...(input.model ? { model: input.model } : {}),
