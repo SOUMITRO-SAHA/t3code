@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  COMMIT_MODES,
-  CUSTOM_COMMIT_TEMPLATES,
-} from "./commitTemplates";
+import { COMMIT_MODES, CUSTOM_COMMIT_TEMPLATES } from "./commitTemplates";
 
 describe("commitTemplates", () => {
   describe("COMMIT_MODES", () => {
