@@ -886,6 +886,48 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("custom mode uses commitMessage as generation input instead of a literal commit", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      fs.writeFileSync(path.join(repoDir, "README.md"), "hello\ncustom-mode\n");
+      let generatedCount = 0;
+      let capturedMessage: string | undefined;
+
+      const { manager } = yield* makeManager({
+        textGeneration: {
+          generateCommitMessage: (input) =>
+            Effect.sync(() => {
+              generatedCount += 1;
+              capturedMessage = input.message;
+              return {
+                subject: "Implement custom commit format",
+                body: "",
+                ...(input.includeBranch ? { branch: "feature/implement-custom-commit-format" } : {}),
+              };
+            }),
+        },
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit",
+        commitMessageMode: "custom",
+        commitMessage: "Use ticket references in the footer.",
+      });
+
+      expect(result.commit.status).toBe("created");
+      expect(result.commit.subject).toBe("Implement custom commit format");
+      expect(generatedCount).toBe(1);
+      expect(capturedMessage).toBe("Use ticket references in the footer.");
+      expect(
+        yield* runGit(repoDir, ["log", "-1", "--pretty=%s"]).pipe(
+          Effect.map((gitResult) => gitResult.stdout.trim()),
+        ),
+      ).toBe("Implement custom commit format");
+    }),
+  );
+
   it.effect("skips commit when there are no uncommitted changes", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");
