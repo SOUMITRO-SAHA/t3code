@@ -648,7 +648,10 @@ export const makeGitManager = Effect.gen(function* () {
         return null;
       }
 
-      const customCommit = parseCustomCommitMessage(input.commitMessage ?? "");
+      const customCommit =
+        input.commitMessageMode === "custom"
+          ? null
+          : parseCustomCommitMessage(input.commitMessage ?? "");
       if (customCommit) {
         return {
           subject: customCommit.subject,

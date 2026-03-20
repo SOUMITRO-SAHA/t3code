@@ -602,9 +602,9 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
             subject: "Add feature",
             body: "",
           }),
-          stdinMustContain: "Extracted commit template:\n<type>(<scope>): <subject>",
+          stdinMustContain: "Commit message template to follow:\n<type>(<scope>): <subject>",
           stdinMustNotContain:
-            "Original user message:\ntemplate: Standard commit format (Conventional Commits): '<type>(<scope>): <subject>'",
+            "Additional user context:\ntemplate: Standard commit format (Conventional Commits): '<type>(<scope>): <subject>'",
         },
         Effect.gen(function* () {
           const textGeneration = yield* TextGeneration;

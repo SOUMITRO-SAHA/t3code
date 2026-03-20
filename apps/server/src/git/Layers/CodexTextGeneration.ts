@@ -119,15 +119,36 @@ function extractCustomCommitTemplate(raw: string): {
 
   const template = placeholderTemplate.trim();
   const templateLine = templateLabelMatch?.[0]?.trim();
-  const guidanceLines = normalized
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && line !== templateLine);
+
+  // Try to find the line that contains the template (with or without quotes)
+  const lines = normalized.split("\n").map((line) => line.trim());
+  let templateSourceLine: string | null = null;
+  if (templateLine) {
+    templateSourceLine = templateLine;
+  } else {
+    // Try to find a line that contains the template with quotes
+    for (const line of lines) {
+      if (
+        line.includes(`'${template}'`) ||
+        line.includes(`"${template}"`) ||
+        line.includes(`\`${template}\``)
+      ) {
+        templateSourceLine = line;
+        break;
+      }
+    }
+  }
+
+  const guidanceLines = lines.filter((line) => line.length > 0 && line !== templateSourceLine);
   const guidance = guidanceLines.join("\n").trim();
+
+  // If guidance is the same as the template (or contained within it), don't duplicate
+  const hasUniqueGuidance =
+    guidance.length > 0 && guidance !== template && !template.includes(guidance);
 
   return {
     template: template.length > 0 ? template : null,
-    guidance: guidance.length > 0 ? guidance : null,
+    guidance: hasUniqueGuidance ? guidance : null,
   };
 }
 
@@ -401,18 +422,22 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             promptSections.push(
               "",
               "Custom mode instructions:",
-              "- Treat the user input as a template, example, or formatting preference.",
-              "- Infer the desired commit format from that input and generate a new commit message for the staged changes.",
-              "- Replace placeholders like <type>, <scope>, <subject>, PROJ-123, <component>, or <description> with values that match the staged changes.",
-              "- Do not output the template literally.",
+              "- Follow the provided template/format to generate a commit message for the staged changes.",
+              "- Replace placeholders like <type>, <scope>, <subject>, PROJ-123, <component>, or <description> with appropriate values based on the changes.",
+              "- If additional context is provided below, incorporate it into the generated commit message.",
+              "- Generate a complete, ready-to-use commit message following the template structure.",
             );
             if (customTemplate.template) {
-              promptSections.push("", "Extracted commit template:", customTemplate.template);
+              promptSections.push(
+                "",
+                "Commit message template to follow:",
+                customTemplate.template,
+              );
             }
             if (customTemplate.guidance) {
               promptSections.push(
                 "",
-                "Original user message:",
+                "Additional user context:",
                 limitSection(customTemplate.guidance, 8_000),
               );
             }

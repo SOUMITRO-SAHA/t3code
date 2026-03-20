@@ -46,7 +46,10 @@ interface FakeGitTextGeneration {
     branch: string | null;
     stagedSummary: string;
     stagedPatch: string;
+    message?: string;
     includeBranch?: boolean;
+    model?: string;
+    commitMessageMode?: "auto" | "gitmoji" | "standard" | "custom";
   }) => Effect.Effect<
     { subject: string; body: string; branch?: string | undefined },
     TextGenerationError
@@ -450,6 +453,7 @@ function runStackedAction(
     cwd: string;
     action: "commit" | "commit_push" | "commit_push_pr";
     commitMessage?: string;
+    commitMessageMode?: "auto" | "gitmoji" | "standard" | "custom";
     featureBranch?: boolean;
     filePaths?: readonly string[];
   },
@@ -903,7 +907,9 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
               return {
                 subject: "Implement custom commit format",
                 body: "",
-                ...(input.includeBranch ? { branch: "feature/implement-custom-commit-format" } : {}),
+                ...(input.includeBranch
+                  ? { branch: "feature/implement-custom-commit-format" }
+                  : {}),
               };
             }),
         },
@@ -913,18 +919,58 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         cwd: repoDir,
         action: "commit",
         commitMessageMode: "custom",
-        commitMessage: "Use ticket references in the footer.",
+        commitMessage: "PROJ-123 <type>: <subject>",
       });
 
       expect(result.commit.status).toBe("created");
       expect(result.commit.subject).toBe("Implement custom commit format");
       expect(generatedCount).toBe(1);
-      expect(capturedMessage).toBe("Use ticket references in the footer.");
+      expect(capturedMessage).toBe("PROJ-123 <type>: <subject>");
       expect(
         yield* runGit(repoDir, ["log", "-1", "--pretty=%s"]).pipe(
           Effect.map((gitResult) => gitResult.stdout.trim()),
         ),
       ).toBe("Implement custom commit format");
+    }),
+  );
+
+  it.effect("featureBranch custom mode uses commitMessage as generation input", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      fs.writeFileSync(path.join(repoDir, "README.md"), "hello\ncustom-feature-mode\n");
+      let generatedCount = 0;
+      let capturedMessage: string | undefined;
+
+      const { manager } = yield* makeManager({
+        textGeneration: {
+          generateCommitMessage: (input) =>
+            Effect.sync(() => {
+              generatedCount += 1;
+              capturedMessage = input.message;
+              return {
+                subject: "feat(auth): add login validation",
+                body: "",
+                ...(input.includeBranch ? { branch: "feature/add-login-validation" } : {}),
+              };
+            }),
+        },
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit",
+        featureBranch: true,
+        commitMessageMode: "custom",
+        commitMessage: "PROJ-123 <type>: <subject>",
+      });
+
+      expect(result.branch.status).toBe("created");
+      expect(result.branch.name).toBe("feature/add-login-validation");
+      expect(result.commit.status).toBe("created");
+      expect(result.commit.subject).toBe("feat(auth): add login validation");
+      expect(generatedCount).toBe(1);
+      expect(capturedMessage).toBe("PROJ-123 <type>: <subject>");
     }),
   );
 
