@@ -1,4 +1,4 @@
-import type { GitStackedAction } from "@t3tools/contracts";
+import type { GitCommitMessageMode, GitStackedAction } from "@t3tools/contracts";
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import { ensureNativeApi } from "../nativeApi";
 
@@ -120,14 +120,12 @@ export function gitRunStackedActionMutationOptions(input: {
       action,
       commitMessage,
       commitMessageMode,
-      commitMessageCustomInstructions,
       featureBranch,
       filePaths,
     }: {
       action: GitStackedAction;
       commitMessage?: string;
-      commitMessageMode?: "auto" | "gitmoji" | "standard" | "custom";
-      commitMessageCustomInstructions?: string;
+      commitMessageMode?: GitCommitMessageMode;
       featureBranch?: boolean;
       filePaths?: string[];
     }) => {
@@ -138,7 +136,6 @@ export function gitRunStackedActionMutationOptions(input: {
         action,
         ...(commitMessage ? { commitMessage } : {}),
         ...(commitMessageMode ? { commitMessageMode } : {}),
-        ...(commitMessageCustomInstructions ? { commitMessageCustomInstructions } : {}),
         ...(featureBranch ? { featureBranch } : {}),
         ...(filePaths ? { filePaths } : {}),
         ...(input.model ? { model: input.model } : {}),

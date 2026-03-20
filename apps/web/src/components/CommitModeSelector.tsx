@@ -8,7 +8,7 @@ import {
   SparklesIcon,
   SmileIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { cn } from "~/lib/utils";
@@ -22,10 +22,10 @@ const COMMIT_MODES: ReadonlyArray<{
 }> = [
   {
     value: "standard",
-    label: "Conventional",
-    summary: "Conventional format",
+    label: "Standard",
+    summary: "Standard format",
     description:
-      "Follows strict conventional commit format with type, optional scope, and description",
+      "Uses the Conventional Commits structure with type, optional scope, and description",
     icon: GitBranchIcon,
   },
   {
@@ -39,9 +39,8 @@ const COMMIT_MODES: ReadonlyArray<{
   {
     value: "gitmoji",
     label: "Gitmoji",
-    summary: "Emoji + conventional",
-    description:
-      "Uses Gitmoji emoji prefixes while following conventional commit structure for expressive commits",
+    summary: "Emoji + standard",
+    description: "Uses Gitmoji emoji prefixes while following the standard conventional structure",
     icon: SmileIcon,
   },
   {
@@ -61,34 +60,32 @@ const CUSTOM_TEMPLATES: ReadonlyArray<{
   example: string;
 }> = [
   {
-    id: "standard",
-    label: "Conventional",
-    prompt: "Conventional Commits: '<type>(<scope>): <subject>'",
-    description: "Most common machine-readable format for changelogs and release tooling",
-    example: "feat(auth): add login validation",
-  },
-  {
-    id: "conventional-ticket",
-    label: "Conventional + Ticket",
-    prompt:
-      "Conventional Commits with ticket reference in footer: '<type>(<scope>): <subject>' plus footer like 'Refs: PROJ-123'",
-    description: "Best fit when you need issue tracking without breaking conventional tooling",
-    example: "feat(auth): add login validation",
-  },
-  {
     id: "simple",
     label: "Simple",
     prompt: "Simple git message: imperative subject only, no prefix",
     description: "Plain readable fallback when you do not need automated parsing",
     example: "add login validation",
   },
+  {
+    id: "standard",
+    label: "Standard",
+    prompt: "Standard commit format (Conventional Commits): '<type>(<scope>): <subject>'",
+    description: "Most common machine-readable format for changelogs and release tooling",
+    example: "feat(auth): add login validation",
+  },
+  {
+    id: "standard-ticket",
+    label: "Standard + Ticket",
+    prompt:
+      "Standard commit format with ticket reference in footer: '<type>(<scope>): <subject>' plus footer like 'Refs: PROJ-123'",
+    description: "Best fit when you need issue tracking without breaking conventional tooling",
+    example: "feat(auth): add login validation",
+  },
 ] as const;
 
 interface CommitModeSelectorProps {
   value: GitCommitMessageMode;
   onChange: (value: GitCommitMessageMode) => void;
-  customInstructions: string;
-  onCustomInstructionsChange: (value: string) => void;
   commitMessage: string;
   onCommitMessageChange: (value: string) => void;
   disabled?: boolean;
@@ -97,27 +94,52 @@ interface CommitModeSelectorProps {
 export function CommitModeSelector({
   value,
   onChange,
-  customInstructions,
-  onCustomInstructionsChange,
   commitMessage,
   onCommitMessageChange,
   disabled = false,
 }: CommitModeSelectorProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [templatePopoverOpen, setTemplatePopoverOpen] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const lastAppliedTemplateRef = useRef<(typeof CUSTOM_TEMPLATES)[number] | null>(null);
+  const previousValueRef = useRef<GitCommitMessageMode>(value);
+  const commitMessageRef = useRef(commitMessage);
+
+  useEffect(() => {
+    commitMessageRef.current = commitMessage;
+  }, [commitMessage]);
+
+  useEffect(() => {
+    if (previousValueRef.current !== value && lastAppliedTemplateRef.current) {
+      const updatedMessage = commitMessageRef.current
+        .replace(lastAppliedTemplateRef.current.prompt, "")
+        .replace(/\n\n+/g, "\n\n")
+        .trim();
+      onCommitMessageChange(updatedMessage);
+    }
+    setSelectedTemplateId(null);
+    lastAppliedTemplateRef.current = null;
+    previousValueRef.current = value;
+  }, [value, onCommitMessageChange]);
 
   const selectedMode = COMMIT_MODES.find((mode) => mode.value === value);
 
-  useEffect(() => {
-    if (value !== "custom" && customInstructions.trim()) {
-      onCustomInstructionsChange("");
-    }
-  }, [value, customInstructions, onCustomInstructionsChange]);
-
   const handleTemplateSelect = (template: (typeof CUSTOM_TEMPLATES)[number]) => {
-    onCommitMessageChange(template.prompt);
+    let newMessage = commitMessage;
+
+    if (lastAppliedTemplateRef.current) {
+      newMessage = newMessage.replace(lastAppliedTemplateRef.current.prompt, "").trim();
+    }
+
+    newMessage = newMessage.trim() ? `${newMessage}\n\n${template.prompt}` : template.prompt;
+
+    onCommitMessageChange(newMessage);
+    setSelectedTemplateId(template.id);
+    lastAppliedTemplateRef.current = template;
     setTemplatePopoverOpen(false);
   };
+
+  const isTemplateSelected = (templateId: string) => selectedTemplateId === templateId;
 
   return (
     <div className="space-y-3">
@@ -194,14 +216,16 @@ export function CommitModeSelector({
                   disabled={disabled}
                 >
                   <span className="text-xs">
-                    {commitMessage.trim() ? "✓ Template applied" : "Choose a template..."}
+                    {selectedTemplateId
+                      ? `✓ ${CUSTOM_TEMPLATES.find((t) => t.id === selectedTemplateId)?.label || "Template applied"}`
+                      : "Choose a template..."}
                   </span>
                   <ChevronRightIcon className="size-3.5" />
                 </Button>
               }
             />
-            <PopoverPopup align="start" sideOffset={8} className="w-80">
-              <div className="space-y-1 p-1">
+            <PopoverPopup align="start" side="top" sideOffset={8} className="w-80">
+              <div className="space-y-1 p-1" role="menu" aria-label="Commit message templates">
                 <p className="px-2 pt-1 text-[10px] font-medium text-muted-foreground">
                   PREDEFINED TEMPLATES
                 </p>
@@ -211,7 +235,14 @@ export function CommitModeSelector({
                     type="button"
                     disabled={disabled}
                     onClick={() => handleTemplateSelect(template)}
-                    className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                    role="menuitem"
+                    aria-selected={isTemplateSelected(template.id)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                      "hover:bg-accent focus:bg-accent focus:outline-none",
+                      "disabled:opacity-50 disabled:cursor-not-allowed",
+                      isTemplateSelected(template.id) && "bg-accent/50",
+                    )}
                   >
                     <div className="flex flex-col gap-0.5">
                       <span className="font-medium">{template.label}</span>
@@ -219,17 +250,17 @@ export function CommitModeSelector({
                         {template.description}
                       </span>
                     </div>
-                    {commitMessage.includes(template.prompt) && (
-                      <CheckIcon className="size-3 shrink-0 text-success" />
+                    {isTemplateSelected(template.id) && (
+                      <CheckIcon className="size-3 shrink-0 text-success" aria-hidden="true" />
                     )}
                   </button>
                 ))}
               </div>
             </PopoverPopup>
           </Popover>
-          {commitMessage && (
+          {commitMessage && selectedTemplateId && (
             <p className="text-[9px] text-muted-foreground">
-              💡 Template applied to commit message above. Edit to customize.
+              💡 Template applied to commit message below. Edit to customize.
             </p>
           )}
         </div>

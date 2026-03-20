@@ -68,6 +68,7 @@ interface PendingDefaultBranchAction {
 }
 
 type GitActionToastId = ReturnType<typeof toastManager.add>;
+const DEFAULT_COMMIT_MESSAGE_MODE: GitCommitMessageMode = "standard";
 
 function getMenuActionDisabledReason({
   item,
@@ -169,8 +170,9 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
   const queryClient = useQueryClient();
   const [isCommitDialogOpen, setIsCommitDialogOpen] = useState(false);
   const [dialogCommitMessage, setDialogCommitMessage] = useState("");
-  const [commitMessageMode, setCommitMessageMode] = useState<GitCommitMessageMode>("standard");
-  const [customCommitInstructions, setCustomCommitInstructions] = useState("");
+  const [commitMessageMode, setCommitMessageMode] = useState<GitCommitMessageMode>(
+    DEFAULT_COMMIT_MESSAGE_MODE,
+  );
   const [excludedFiles, setExcludedFiles] = useState<ReadonlySet<string>>(new Set());
   const [isEditingFiles, setIsEditingFiles] = useState(false);
   const [pendingDefaultBranchAction, setPendingDefaultBranchAction] =
@@ -273,8 +275,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     async ({
       action,
       commitMessage,
-      commitMessageMode: mode = "auto",
-      commitMessageCustomInstructions = "",
+      commitMessageMode: mode = DEFAULT_COMMIT_MESSAGE_MODE,
       forcePushOnlyProgress = false,
       onConfirmed,
       skipDefaultBranchPrompt = false,
@@ -287,7 +288,6 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       action: GitStackedAction;
       commitMessage?: string;
       commitMessageMode?: GitCommitMessageMode;
-      commitMessageCustomInstructions?: string;
       forcePushOnlyProgress?: boolean;
       onConfirmed?: () => void;
       skipDefaultBranchPrompt?: boolean;
@@ -368,7 +368,6 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
         action,
         ...(commitMessage ? { commitMessage } : {}),
         ...(mode ? { commitMessageMode: mode } : {}),
-        ...(commitMessageCustomInstructions ? { commitMessageCustomInstructions } : {}),
         ...(featureBranch ? { featureBranch } : {}),
         ...(filePaths ? { filePaths } : {}),
       });
@@ -479,18 +478,12 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       action,
       ...(commitMessage ? { commitMessage } : {}),
       commitMessageMode,
-      commitMessageCustomInstructions: customCommitInstructions,
       forcePushOnlyProgress,
       ...(onConfirmed ? { onConfirmed } : {}),
       ...(filePaths ? { filePaths } : {}),
       skipDefaultBranchPrompt: true,
     });
-  }, [
-    pendingDefaultBranchAction,
-    runGitActionWithToast,
-    commitMessageMode,
-    customCommitInstructions,
-  ]);
+  }, [pendingDefaultBranchAction, runGitActionWithToast, commitMessageMode]);
 
   const checkoutNewBranchAndRunAction = useCallback(
     (actionParams: {
@@ -503,12 +496,11 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       void runGitActionWithToast({
         ...actionParams,
         commitMessageMode,
-        commitMessageCustomInstructions: customCommitInstructions,
         featureBranch: true,
         skipDefaultBranchPrompt: true,
       });
     },
-    [runGitActionWithToast, commitMessageMode, customCommitInstructions],
+    [runGitActionWithToast, commitMessageMode],
   );
 
   const checkoutFeatureBranchAndContinuePendingAction = useCallback(() => {
@@ -531,8 +523,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
 
     setIsCommitDialogOpen(false);
     setDialogCommitMessage("");
-    setCommitMessageMode("auto");
-    setCustomCommitInstructions("");
+    setCommitMessageMode(DEFAULT_COMMIT_MESSAGE_MODE);
     setExcludedFiles(new Set());
     setIsEditingFiles(false);
 
@@ -616,15 +607,13 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     const commitMessage = dialogCommitMessage.trim();
     setIsCommitDialogOpen(false);
     setDialogCommitMessage("");
-    setCommitMessageMode("auto");
-    setCustomCommitInstructions("");
+    setCommitMessageMode(DEFAULT_COMMIT_MESSAGE_MODE);
     setExcludedFiles(new Set());
     setIsEditingFiles(false);
     void runGitActionWithToast({
       action: "commit",
       ...(commitMessage ? { commitMessage } : {}),
       commitMessageMode,
-      commitMessageCustomInstructions: customCommitInstructions,
       ...(!allSelected ? { filePaths: selectedFiles.map((f) => f.path) } : {}),
     });
   }, [
@@ -634,7 +623,6 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     runGitActionWithToast,
     selectedFiles,
     commitMessageMode,
-    customCommitInstructions,
     setDialogCommitMessage,
     setIsCommitDialogOpen,
   ]);
@@ -799,8 +787,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
           if (!open) {
             setIsCommitDialogOpen(false);
             setDialogCommitMessage("");
-            setCommitMessageMode("auto");
-            setCustomCommitInstructions("");
+            setCommitMessageMode(DEFAULT_COMMIT_MESSAGE_MODE);
             setExcludedFiles(new Set());
             setIsEditingFiles(false);
           }
@@ -927,8 +914,6 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
             <CommitModeSelector
               value={commitMessageMode}
               onChange={setCommitMessageMode}
-              customInstructions={customCommitInstructions}
-              onCustomInstructionsChange={setCustomCommitInstructions}
               commitMessage={dialogCommitMessage}
               onCommitMessageChange={setDialogCommitMessage}
             />
@@ -949,8 +934,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
               onClick={() => {
                 setIsCommitDialogOpen(false);
                 setDialogCommitMessage("");
-                setCommitMessageMode("auto");
-                setCustomCommitInstructions("");
+                setCommitMessageMode(DEFAULT_COMMIT_MESSAGE_MODE);
                 setExcludedFiles(new Set());
                 setIsEditingFiles(false);
               }}

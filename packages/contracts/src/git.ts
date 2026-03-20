@@ -66,9 +66,6 @@ export const GitRunStackedActionInput = Schema.Struct({
   commitMessageMode: Schema.optional(GitCommitMessageMode).pipe(
     Schema.withConstructorDefault(() => Option.some("standard" as const)),
   ),
-  commitMessageCustomInstructions: Schema.optional(
-    TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(5_000)),
-  ),
   featureBranch: Schema.optional(Schema.Boolean),
   filePaths: Schema.optional(
     Schema.Array(TrimmedNonEmptyStringSchema).check(Schema.isMinLength(1)),
