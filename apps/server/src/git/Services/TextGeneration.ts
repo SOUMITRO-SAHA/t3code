@@ -17,14 +17,14 @@ export interface CommitMessageGenerationInput {
   branch: string | null;
   stagedSummary: string;
   stagedPatch: string;
+  /** Free-form user message for custom commit generation. */
+  message?: string;
   /** When true, the model also returns a semantic branch name for the change. */
   includeBranch?: boolean;
   /** Model to use for generation. Defaults to gpt-5.4-mini if not specified. */
   model?: string;
-  /** Commit message generation mode. Defaults to 'auto'. */
+  /** Commit message generation mode. Defaults to 'standard'. */
   commitMessageMode?: "auto" | "gitmoji" | "standard" | "custom";
-  /** Custom instructions for commit message generation (only used when mode is 'custom'). */
-  commitMessageCustomInstructions?: string;
 }
 
 export interface CommitMessageGenerationResult {
