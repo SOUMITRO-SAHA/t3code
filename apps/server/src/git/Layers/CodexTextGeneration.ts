@@ -1,9 +1,21 @@
 import { randomUUID } from "node:crypto";
 
-import { Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
+import {
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Schema,
+  Stream,
+} from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shared/git";
+import { DEFAULT_GIT_TEXT_GENERATION_MODEL } from "@t3tools/contracts";
+import {
+  sanitizeBranchFragment,
+  sanitizeFeatureBranchName,
+} from "@t3tools/shared/git";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
@@ -19,7 +31,6 @@ import {
   TextGeneration,
 } from "../Services/TextGeneration.ts";
 
-const CODEX_MODEL = "gpt-5.3-codex";
 const CODEX_REASONING_EFFORT = "low";
 const CODEX_TIMEOUT_MS = 180_000;
 
@@ -105,7 +116,8 @@ const makeCodexTextGeneration = Effect.gen(function* () {
   const gitCore = yield* GitCore;
 
   const analyzeCommitPatterns = analyzeCommitPatternsUtil({
-    getRecentCommitMessages: (cwd, count) => gitCore.getRecentCommitMessages(cwd, count),
+    getRecentCommitMessages: (cwd, count) =>
+      gitCore.getRecentCommitMessages(cwd, count),
   });
 
   type MaterializedImageAttachments = {
@@ -124,20 +136,28 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         }),
       ).pipe(
         Effect.mapError((cause) =>
-          normalizeCodexError(operation, cause, "Failed to collect process output"),
+          normalizeCodexError(
+            operation,
+            cause,
+            "Failed to collect process output",
+          ),
         ),
       );
       return text;
     });
 
-  const tempDir = process.env.TMPDIR ?? process.env.TEMP ?? process.env.TMP ?? "/tmp";
+  const tempDir =
+    process.env.TMPDIR ?? process.env.TEMP ?? process.env.TMP ?? "/tmp";
 
   const writeTempFile = (
     operation: string,
     prefix: string,
     content: string,
   ): Effect.Effect<string, TextGenerationError> => {
-    const filePath = path.join(tempDir, `t3code-${prefix}-${process.pid}-${randomUUID()}.tmp`);
+    const filePath = path.join(
+      tempDir,
+      `t3code-${prefix}-${process.pid}-${randomUUID()}.tmp`,
+    );
     return fileSystem.writeFileString(filePath, content).pipe(
       Effect.mapError(
         (cause) =>
@@ -155,7 +175,10 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     fileSystem.remove(filePath).pipe(Effect.catch(() => Effect.void));
 
   const materializeImageAttachments = (
-    _operation: "generateCommitMessage" | "generatePrContent" | "generateBranchName",
+    _operation:
+      | "generateCommitMessage"
+      | "generatePrContent"
+      | "generateBranchName",
     attachments: BranchNameGenerationInput["attachments"],
   ): Effect.Effect<MaterializedImageAttachments, TextGenerationError> =>
     Effect.gen(function* () {
@@ -194,13 +217,18 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     outputSchemaJson,
     imagePaths = [],
     cleanupPaths = [],
+    model,
   }: {
-    operation: "generateCommitMessage" | "generatePrContent" | "generateBranchName";
+    operation:
+      | "generateCommitMessage"
+      | "generatePrContent"
+      | "generateBranchName";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
     imagePaths?: ReadonlyArray<string>;
     cleanupPaths?: ReadonlyArray<string>;
+    model?: string;
   }): Effect.Effect<S["Type"], TextGenerationError, S["DecodingServices"]> =>
     Effect.gen(function* () {
       const schemaPath = yield* writeTempFile(
@@ -219,7 +247,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             "-s",
             "read-only",
             "--model",
-            CODEX_MODEL,
+            model ?? DEFAULT_GIT_TEXT_GENERATION_MODEL,
             "--config",
             `model_reasoning_effort="${CODEX_REASONING_EFFORT}"`,
             "--output-schema",
@@ -242,7 +270,11 @@ const makeCodexTextGeneration = Effect.gen(function* () {
           .spawn(command)
           .pipe(
             Effect.mapError((cause) =>
-              normalizeCodexError(operation, cause, "Failed to spawn Codex CLI process"),
+              normalizeCodexError(
+                operation,
+                cause,
+                "Failed to spawn Codex CLI process",
+              ),
             ),
           );
 
@@ -253,7 +285,11 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             child.exitCode.pipe(
               Effect.map((value) => Number(value)),
               Effect.mapError((cause) =>
-                normalizeCodexError(operation, cause, "Failed to read Codex CLI exit code"),
+                normalizeCodexError(
+                  operation,
+                  cause,
+                  "Failed to read Codex CLI exit code",
+                ),
               ),
             ),
           ],
@@ -275,7 +311,9 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       });
 
       const cleanup = Effect.all(
-        [schemaPath, outputPath, ...cleanupPaths].map((filePath) => safeUnlink(filePath)),
+        [schemaPath, outputPath, ...cleanupPaths].map((filePath) =>
+          safeUnlink(filePath),
+        ),
         {
           concurrency: "unbounded",
         },
@@ -289,7 +327,10 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             Option.match({
               onNone: () =>
                 Effect.fail(
-                  new TextGenerationError({ operation, detail: "Codex CLI request timed out." }),
+                  new TextGenerationError({
+                    operation,
+                    detail: "Codex CLI request timed out.",
+                  }),
                 ),
               onSome: () => Effect.void,
             }),
@@ -305,7 +346,9 @@ const makeCodexTextGeneration = Effect.gen(function* () {
                 cause,
               }),
           ),
-          Effect.flatMap(Schema.decodeEffect(Schema.fromJsonString(outputSchemaJson))),
+          Effect.flatMap(
+            Schema.decodeEffect(Schema.fromJsonString(outputSchemaJson)),
+          ),
           Effect.catchTag("SchemaError", (cause) =>
             Effect.fail(
               new TextGenerationError({
@@ -319,14 +362,18 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       }).pipe(Effect.ensuring(cleanup));
     });
 
-  const generateCommitMessage: TextGenerationShape["generateCommitMessage"] = (input) => {
+  const generateCommitMessage: TextGenerationShape["generateCommitMessage"] = (
+    input,
+  ) => {
     return Effect.gen(function* () {
       const patterns = yield* analyzeCommitPatterns(input.cwd);
       const wantsBranch = input.includeBranch === true;
 
       const exampleLines =
         patterns.examples.length > 0
-          ? patterns.examples?.slice(0, 2)?.flatMap((ex) => ["  Example:", `  ${ex}`])
+          ? patterns.examples
+              ?.slice(0, 2)
+              ?.flatMap((ex) => ["  Example:", `  ${ex}`])
           : ["  (No previous commit examples available)"];
 
       const promptSections = [
@@ -353,14 +400,18 @@ const makeCodexTextGeneration = Effect.gen(function* () {
           ? [
               "- Use conventional commit types: feat, fix, docs, style, refactor, test, chore, perf, build, ci, revert",
             ]
-          : ["- No conventional commit type prefix (not used in this repository)"]),
+          : [
+              "- No conventional commit type prefix (not used in this repository)",
+            ]),
         "- Subject must be imperative mood (e.g., 'add feature' not 'added feature' or 'adds feature')",
         "- Subject must be <= 72 characters",
         "- No trailing period on subject line",
         "- Body should be empty string OR include bullet points with 'for' context (e.g., 'Add user authentication' -> 'for secure access control')",
         "- Focus on user-visible or developer-visible impact, not implementation details",
         ...(wantsBranch
-          ? ["- branch must be a short semantic git branch fragment (2-6 words, no punctuation)"]
+          ? [
+              "- branch must be a short semantic git branch fragment (2-6 words, no punctuation)",
+            ]
           : []),
       ];
 
@@ -393,6 +444,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         cwd: input.cwd,
         prompt,
         outputSchemaJson,
+        ...(input.model ? { model: input.model } : {}),
       }).pipe(
         Effect.map(
           (generated) =>
@@ -408,7 +460,9 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     });
   };
 
-  const generatePrContent: TextGenerationShape["generatePrContent"] = (input) => {
+  const generatePrContent: TextGenerationShape["generatePrContent"] = (
+    input,
+  ) => {
     const prompt = [
       "You write GitHub pull request content.",
       "Return a JSON object with keys: title, body.",
@@ -439,6 +493,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         title: Schema.String,
         body: Schema.String,
       }),
+      ...(input.model ? { model: input.model } : {}),
     }).pipe(
       Effect.map(
         (generated) =>
@@ -450,7 +505,9 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     );
   };
 
-  const generateBranchName: TextGenerationShape["generateBranchName"] = (input) => {
+  const generateBranchName: TextGenerationShape["generateBranchName"] = (
+    input,
+  ) => {
     return Effect.gen(function* () {
       const { imagePaths } = yield* materializeImageAttachments(
         "generateBranchName",
@@ -490,6 +547,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
           branch: Schema.String,
         }),
         imagePaths,
+        ...(input.model ? { model: input.model } : {}),
       });
 
       return {
@@ -505,4 +563,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
   } satisfies TextGenerationShape;
 });
 
-export const CodexTextGenerationLive = Layer.effect(TextGeneration, makeCodexTextGeneration);
+export const CodexTextGenerationLive = Layer.effect(
+  TextGeneration,
+  makeCodexTextGeneration,
+);
