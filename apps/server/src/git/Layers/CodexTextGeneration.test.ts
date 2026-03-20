@@ -200,7 +200,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
             "  Add important change to the system with too much detail and a trailing period.\nsecondary line",
           body: "\n- added migration\n- updated tests\n",
         }),
-        stdinMustNotContain: "branch must be a short semantic git branch fragment",
+        stdinMustNotContain: "branch must be a short semantic git branch fragment for this change",
       },
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
@@ -228,7 +228,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
           body: "",
           branch: "fix/important-system-change",
         }),
-        stdinMustContain: "branch must be a short semantic git branch fragment",
+        stdinMustContain: "branch must be a short semantic git branch fragment for this change",
       },
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
@@ -517,7 +517,32 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
     ),
   );
 
-  it.effect("includes pattern analysis and examples in commit message prompt", () =>
+  it.effect("includes repository pattern analysis only in auto mode", () =>
+    withFakeCodexEnv(
+      {
+        output: JSON.stringify({
+          subject: "Add feature",
+          body: "",
+        }),
+        stdinMustContain: "Repository analysis:",
+      },
+      Effect.gen(function* () {
+        const textGeneration = yield* TextGeneration;
+
+        const generated = yield* textGeneration.generateCommitMessage({
+          cwd: process.cwd(),
+          branch: "feature/test",
+          stagedSummary: "M README.md",
+          stagedPatch: "diff --git a/README.md",
+          commitMessageMode: "auto",
+        });
+
+        expect(generated.subject).toBe("Add feature");
+      }),
+    ),
+  );
+
+  it.effect("uses the standard base commit prompt by default", () =>
     withFakeCodexEnv(
       {
         output: JSON.stringify({
@@ -525,7 +550,8 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
           body: "",
         }),
         stdinMustContain:
-          "Detected patterns:\n\nRecent commit examples from this repository:\n\nFormatting instructions:",
+          "Rules:\n- subject must be imperative, <= 72 chars, and no trailing period\n- body can be empty string or short bullet points",
+        stdinMustNotContain: "Repository analysis:",
       },
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
@@ -542,14 +568,14 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
     ),
   );
 
-  it.effect("includes expanded conventional commit types in prompt", () =>
+  it.effect("includes gitmoji formatting instructions when gitmoji mode is selected", () =>
     withFakeCodexEnv(
       {
         output: JSON.stringify({
-          subject: "Add feature",
+          subject: "✨ feat: add feature",
           body: "",
         }),
-        stdinMustContain: "feat, fix, docs, style, refactor, test, chore, perf, build, ci, revert",
+        stdinMustContain: "- Use an appropriate gitmoji in the commit message.",
       },
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
@@ -559,6 +585,33 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
           branch: "feature/test",
           stagedSummary: "M README.md",
           stagedPatch: "diff --git a/README.md",
+          commitMessageMode: "gitmoji",
+        });
+
+        expect(generated.subject).toBe("✨ feat: add feature");
+      }),
+    ),
+  );
+
+  it.effect("includes the user message when custom mode is selected", () =>
+    withFakeCodexEnv(
+      {
+        output: JSON.stringify({
+          subject: "Add feature",
+          body: "",
+        }),
+        stdinMustContain: "User message:\nUse ticket references in the footer.",
+      },
+      Effect.gen(function* () {
+        const textGeneration = yield* TextGeneration;
+
+        const generated = yield* textGeneration.generateCommitMessage({
+          cwd: process.cwd(),
+          branch: "feature/test",
+          stagedSummary: "M README.md",
+          stagedPatch: "diff --git a/README.md",
+          commitMessageMode: "custom",
+          message: "Use ticket references in the footer.",
         });
 
         expect(generated.subject).toBe("Add feature");
@@ -573,8 +626,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
           subject: "Add feature",
           body: "",
         }),
-        stdinMustContain:
-          "Subject must be imperative mood (e.g., 'add feature' not 'added feature' or 'adds feature')",
+        stdinMustContain: "- subject must be imperative, <= 72 chars, and no trailing period",
       },
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
