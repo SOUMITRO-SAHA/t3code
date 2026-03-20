@@ -8,9 +8,9 @@ import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shar
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
-import { GitCore } from "../Services/GitCore.ts";
-import { TextGenerationError } from "../Errors.ts";
 import { analyzeCommitPatterns as analyzeCommitPatternsUtil } from "../analyzeCommitPatterns.ts";
+import { TextGenerationError } from "../Errors.ts";
+import { GitCore } from "../Services/GitCore.ts";
 import {
   type BranchNameGenerationInput,
   type BranchNameGenerationResult,
@@ -418,29 +418,16 @@ const makeCodexTextGeneration = Effect.gen(function* () {
           break;
         case "custom":
           if (input.message?.trim()) {
-            const customTemplate = extractCustomCommitTemplate(input.message);
             promptSections.push(
-              "",
-              "Custom mode instructions:",
-              "- Follow the provided template/format to generate a commit message for the staged changes.",
-              "- Replace placeholders like <type>, <scope>, <subject>, PROJ-123, <component>, or <description> with appropriate values based on the changes.",
-              "- If additional context is provided below, incorporate it into the generated commit message.",
-              "- Generate a complete, ready-to-use commit message following the template structure.",
+              "- Generate a commit message strictly following the provided template.",
+              "- Do not change the template structure or format under any condition.",
+              "- Replace all placeholders (<type>, <scope>, <subject>, <body>, <#ref>) with meaningful values based on the staged changes.",
+              "- Ensure the commit message is clear, descriptive, and complete.",
+              "- If the user includes any GitHub or Jira reference (e.g., #123, PROJ-123, or a URL), extract it and include it in the appropriate section of the template.",
+              "- Do not leave any placeholder unresolved.",
+              "- Follow the template exactly — no extra text, no missing sections."
+
             );
-            if (customTemplate.template) {
-              promptSections.push(
-                "",
-                "Commit message template to follow:",
-                customTemplate.template,
-              );
-            }
-            if (customTemplate.guidance) {
-              promptSections.push(
-                "",
-                "Additional user context:",
-                limitSection(customTemplate.guidance, 8_000),
-              );
-            }
           }
           break;
         case "standard":

@@ -81,8 +81,8 @@ export const CUSTOM_COMMIT_TEMPLATES: ReadonlyArray<{
     id: "standard-ticket",
     label: "Standard + Ticket",
     prompt:
-      "Standard commit format with ticket reference in footer: '<type>(<scope>): <subject>' plus footer like 'Refs: PROJ-123'",
-    description: "Best fit when you need issue tracking without breaking conventional tooling",
-    example: "feat(auth): add login validation",
+      "Conventional Commits with issue reference: '<type>(<scope>): <subject>' + body with 'Closes #<number>'",
+    description: "Best for GitHub Issues - paste the issue URL or #number and it will be included",
+    example: "feat(auth): add login validation\n\nCloses #1234",
   },
 ] as const;
