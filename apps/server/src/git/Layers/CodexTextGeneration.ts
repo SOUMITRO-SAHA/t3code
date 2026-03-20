@@ -97,6 +97,40 @@ function sanitizePrTitle(raw: string): string {
   return "Update project changes";
 }
 
+function extractCustomCommitTemplate(raw: string): {
+  template: string | null;
+  guidance: string | null;
+} {
+  const normalized = raw.replace(/\r\n/g, "\n").trim();
+  if (normalized.length === 0) {
+    return { template: null, guidance: null };
+  }
+
+  const templateLabelMatch = normalized.match(/(?:^|\n)\s*template\s*:\s*(.+)/i);
+  const templateSource = templateLabelMatch?.[1]?.trim() ?? normalized;
+  const quotedTemplateMatches = Array.from(
+    templateSource.matchAll(/["'`](.+?)["'`]/g),
+    (match) => match[1]?.trim() ?? "",
+  ).filter((value) => value.length > 0);
+  const placeholderTemplate =
+    quotedTemplateMatches.find((value) => value.includes("<") && value.includes(">")) ??
+    quotedTemplateMatches[0] ??
+    templateSource;
+
+  const template = placeholderTemplate.trim();
+  const templateLine = templateLabelMatch?.[0]?.trim();
+  const guidanceLines = normalized
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && line !== templateLine);
+  const guidance = guidanceLines.join("\n").trim();
+
+  return {
+    template: template.length > 0 ? template : null,
+    guidance: guidance.length > 0 ? guidance : null,
+  };
+}
+
 const makeCodexTextGeneration = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -326,48 +360,68 @@ const makeCodexTextGeneration = Effect.gen(function* () {
 
   const generateCommitMessage: TextGenerationShape["generateCommitMessage"] = (input) => {
     return Effect.gen(function* () {
-      const patterns = yield* analyzeCommitPatterns(input.cwd);
       const wantsBranch = input.includeBranch === true;
-
-      const exampleLines =
-        patterns.examples.length > 0
-          ? patterns.examples?.slice(0, 2)?.flatMap((ex) => ["  Example:", `  ${ex}`])
-          : ["  (No previous commit examples available)"];
-
+      const mode = input.commitMessageMode ?? "standard";
       const promptSections = [
-        "You write concise git commit messages by following the repository's established patterns.",
-        "",
+        "You write concise git commit messages.",
         wantsBranch
           ? "Return a JSON object with keys: subject, body, branch."
           : "Return a JSON object with keys: subject, body.",
-        "",
-        "Detected patterns:",
-        patterns.analysis.trim(),
-        "",
-        "Recent commit examples from this repository:",
-        ...exampleLines,
-        "",
-        "Formatting instructions:",
-        ...(patterns.hasEmojis
-          ? ["- Start with an appropriate emoji if that's the pattern"]
-          : ["- No emoji prefix (not used in this repository)"]),
-        ...(patterns.hasScopes
-          ? ["- Include scope in parentheses like type(scope): when applicable"]
-          : ["- No scope (not used in this repository)"]),
-        ...(patterns.hasTypes
-          ? [
-              "- Use conventional commit types: feat, fix, docs, style, refactor, test, chore, perf, build, ci, revert",
-            ]
-          : ["- No conventional commit type prefix (not used in this repository)"]),
-        "- Subject must be imperative mood (e.g., 'add feature' not 'added feature' or 'adds feature')",
-        "- Subject must be <= 72 characters",
-        "- No trailing period on subject line",
-        "- Body should be empty string OR include bullet points with 'for' context (e.g., 'Add user authentication' -> 'for secure access control')",
-        "- Focus on user-visible or developer-visible impact, not implementation details",
+        "Rules:",
+        "- subject must be imperative, <= 72 chars, and no trailing period",
+        "- body can be empty string or short bullet points",
         ...(wantsBranch
-          ? ["- branch must be a short semantic git branch fragment (2-6 words, no punctuation)"]
+          ? ["- branch must be a short semantic git branch fragment for this change"]
           : []),
+        "- capture the primary user-visible or developer-visible change",
       ];
+
+      switch (mode) {
+        case "auto": {
+          const patterns = yield* analyzeCommitPatterns(input.cwd);
+          const bestExample = patterns.examples[0]?.trim();
+          promptSections.push(
+            "",
+            "Repository analysis:",
+            patterns.analysis.trim(),
+            ...(bestExample
+              ? ["", "Best recent commit example from this repository:", bestExample]
+              : []),
+            "",
+            "- Follow the repository style shown in the analysis and example above.",
+          );
+          break;
+        }
+        case "gitmoji":
+          promptSections.push("- Use an appropriate gitmoji in the commit message.");
+          break;
+        case "custom":
+          if (input.message?.trim()) {
+            const customTemplate = extractCustomCommitTemplate(input.message);
+            promptSections.push(
+              "",
+              "Custom mode instructions:",
+              "- Treat the user input as a template, example, or formatting preference.",
+              "- Infer the desired commit format from that input and generate a new commit message for the staged changes.",
+              "- Replace placeholders like <type>, <scope>, <subject>, PROJ-123, <component>, or <description> with values that match the staged changes.",
+              "- Do not output the template literally.",
+            );
+            if (customTemplate.template) {
+              promptSections.push("", "Extracted commit template:", customTemplate.template);
+            }
+            if (customTemplate.guidance) {
+              promptSections.push(
+                "",
+                "Original user message:",
+                limitSection(customTemplate.guidance, 8_000),
+              );
+            }
+          }
+          break;
+        case "standard":
+        default:
+          break;
+      }
 
       promptSections.push(
         "",

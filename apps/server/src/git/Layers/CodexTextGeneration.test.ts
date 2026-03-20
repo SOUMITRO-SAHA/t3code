@@ -593,30 +593,35 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
     ),
   );
 
-  it.effect("includes the user message when custom mode is selected", () =>
-    withFakeCodexEnv(
-      {
-        output: JSON.stringify({
-          subject: "Add feature",
-          body: "",
+  it.effect(
+    "extracts a commit template from the custom message and does not treat it literally",
+    () =>
+      withFakeCodexEnv(
+        {
+          output: JSON.stringify({
+            subject: "Add feature",
+            body: "",
+          }),
+          stdinMustContain: "Extracted commit template:\n<type>(<scope>): <subject>",
+          stdinMustNotContain:
+            "Original user message:\ntemplate: Standard commit format (Conventional Commits): '<type>(<scope>): <subject>'",
+        },
+        Effect.gen(function* () {
+          const textGeneration = yield* TextGeneration;
+
+          const generated = yield* textGeneration.generateCommitMessage({
+            cwd: process.cwd(),
+            branch: "feature/test",
+            stagedSummary: "M README.md",
+            stagedPatch: "diff --git a/README.md",
+            commitMessageMode: "custom",
+            message:
+              "template: Standard commit format (Conventional Commits): '<type>(<scope>): <subject>'",
+          });
+
+          expect(generated.subject).toBe("Add feature");
         }),
-        stdinMustContain: "User message:\nUse ticket references in the footer.",
-      },
-      Effect.gen(function* () {
-        const textGeneration = yield* TextGeneration;
-
-        const generated = yield* textGeneration.generateCommitMessage({
-          cwd: process.cwd(),
-          branch: "feature/test",
-          stagedSummary: "M README.md",
-          stagedPatch: "diff --git a/README.md",
-          commitMessageMode: "custom",
-          message: "Use ticket references in the footer.",
-        });
-
-        expect(generated.subject).toBe("Add feature");
-      }),
-    ),
+      ),
   );
 
   it.effect("includes imperative mood instructions in prompt", () =>
